@@ -417,11 +417,11 @@ void Live32ChannelAudioProcessorEditor::DynamicsCurve::paint(juce::Graphics& g)
     auto graph = r.reduced(12.0f, 18.0f);
     constexpr double xMin = -60.0, xMax = 6.0;
     constexpr double yMin = -60.0, yMax = 12.0;
-    const auto xForDb = [graph](double db)
+    const auto xForDb = [graph, xMin, xMax](double db)
     {
         return graph.getX() + static_cast<float>((db - xMin) / (xMax - xMin)) * graph.getWidth();
     };
-    const auto yForDb = [graph](double db)
+    const auto yForDb = [graph, yMin, yMax](double db)
     {
         return graph.getBottom() - static_cast<float>((db - yMin) / (yMax - yMin)) * graph.getHeight();
     };
