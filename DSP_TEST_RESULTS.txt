@@ -1,0 +1,6 @@
+sum=11483.9 in=0.25 out=0.45537 gr=6.47812 gate=1
+HPF 20 Hz: -48.1652 dB
+HPF 40 Hz: -24.0996 dB
+HPF 80 Hz: -3.0103 dB
+HPF 160 Hz: -0.0169277 dB
+HPF 1000 Hz: -3.15322e-09 dB
