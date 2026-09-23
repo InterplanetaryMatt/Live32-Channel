@@ -47,7 +47,7 @@ void EQCurve::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xff3b4348));
     g.drawRoundedRectangle(r, 4.0f, 1.0f);
 
-    auto graph = r.reduced(9.0f, 8.0f);
+    auto graph = r.reduced(10.0f, 18.0f);
     const auto xForHz = [graph](double hz)
     {
         const double t = std::log10(hz / 20.0) / std::log10(20000.0 / 20.0);
@@ -58,7 +58,6 @@ void EQCurve::paint(juce::Graphics& g)
         return graph.getCentreY() - static_cast<float>(db / 18.0) * graph.getHeight() * 0.5f;
     };
 
-    g.setFont(juce::FontOptions(9.0f));
     for (double hz : { 20.0, 100.0, 1000.0, 10000.0, 20000.0 })
     {
         const float x = xForHz(hz);
@@ -72,21 +71,31 @@ void EQCurve::paint(juce::Graphics& g)
         g.drawHorizontalLine(static_cast<int>(y), graph.getX(), graph.getRight());
     }
 
-    if (raw("eqOn") < 0.5f)
-    {
-        g.setColour(juce::Colour(0xff6f767b));
-        g.drawText("EQ OFF", graph.toNearestInt(), juce::Justification::centred);
-        return;
-    }
+    const bool eqEnabled = raw("eqOn") >= 0.5f;
+    const bool hpfEnabled = raw("hpfOn") >= 0.5f;
+    const double sr = 48000.0; // display reference; DSP itself follows host sample rate
+    const float hpfHz = raw("hpfHz");
 
-    const double sr = 48000.0; // display-only approximation; filter is clamped safely in DSP
     juce::Path path;
     for (int px = 0; px < static_cast<int>(graph.getWidth()); ++px)
     {
         const double norm = static_cast<double>(px) / std::max(1.0f, graph.getWidth() - 1.0f);
         const double hz = 20.0 * std::pow(1000.0, norm);
         double mag = 1.0;
-        for (int band = 0; band < 4; ++band) mag *= bandMagnitude(band, hz, sr);
+
+        // Dedicated Live32/M32-style LOW CUT is a real 4th-order Butterworth HPF:
+        // two cascaded second-order stages at the same cutoff.
+        if (hpfEnabled)
+        {
+            const auto hp1 = live32::FilterMath::highPass(sr, hpfHz, 0.5411961f);
+            const auto hp2 = live32::FilterMath::highPass(sr, hpfHz, 1.30656296f);
+            mag *= live32::FilterMath::magnitude(hp1, sr, hz);
+            mag *= live32::FilterMath::magnitude(hp2, sr, hz);
+        }
+
+        if (eqEnabled)
+            for (int band = 0; band < 4; ++band) mag *= bandMagnitude(band, hz, sr);
+
         const double db = juce::jlimit(-18.0, 18.0, 20.0 * std::log10(std::max(mag, 1.0e-9)));
         const float x = graph.getX() + static_cast<float>(px);
         const float y = yForDb(db);
@@ -99,6 +108,18 @@ void EQCurve::paint(juce::Graphics& g)
     fill.closeSubPath();
     g.setColour(juce::Colour(0x36ffa800));
     g.fillPath(fill);
-    g.setColour(juce::Colour(0xffffb21a));
+    g.setColour((eqEnabled || hpfEnabled) ? juce::Colour(0xffffb21a) : juce::Colour(0xff70777c));
     g.strokePath(path, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    if (hpfEnabled)
+    {
+        g.setColour(juce::Colour(0xffffb21a));
+        g.drawText("LOW CUT " + juce::String(hpfHz, 0) + " Hz", 10, 3, 140, 14, juce::Justification::centredLeft);
+    }
+    if (!eqEnabled)
+    {
+        g.setColour(juce::Colour(0xff858b90));
+        g.drawText("EQ OFF", getWidth() - 70, 3, 60, 14, juce::Justification::centredRight);
+    }
 }

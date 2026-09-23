@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <array>
 #include <map>
 #include <memory>
 #include "PluginProcessor.h"
@@ -50,6 +51,20 @@ private:
         float input { 0.0f }, output { 0.0f }, gainReduction { 0.0f }, gateClosed { 0.0f };
     };
 
+    class DynamicsCurve final : public juce::Component
+    {
+    public:
+        explicit DynamicsCurve(juce::AudioProcessorValueTreeState& state) : parameters(state) {}
+        void setGainReduction(float gr) { gainReduction = gr; repaint(); }
+        void paint(juce::Graphics&) override;
+
+    private:
+        float raw(const char* id) const noexcept;
+        double outputForInput(double inputDb) const noexcept;
+        juce::AudioProcessorValueTreeState& parameters;
+        float gainReduction { 0.0f };
+    };
+
     KnobControl& addKnob(const juce::String& id, const juce::String& label,
                          const juce::String& suffix = {}, int decimals = 1);
     ToggleControl& addToggle(const juce::String& id, const juce::String& text);
@@ -59,16 +74,21 @@ private:
     void layoutKnob(const char* id, juce::Rectangle<int> bounds);
     void layoutToggle(const char* id, juce::Rectangle<int> bounds);
     void layoutChoice(const char* id, juce::Rectangle<int> bounds);
+    void selectEqBand(int band);
+    void updateEqBandVisibility();
     void timerCallback() override;
 
     Live32ChannelAudioProcessor& processor;
     Live32LookAndFeel lookAndFeel;
     EQCurve eqCurve;
+    DynamicsCurve dynamicsCurve;
     MeterPanel meters;
 
     std::map<juce::String, std::unique_ptr<KnobControl>> knobs;
     std::map<juce::String, std::unique_ptr<ToggleControl>> toggles;
     std::map<juce::String, std::unique_ptr<ChoiceControl>> choices;
+    std::array<std::unique_ptr<juce::ToggleButton>, 4> eqBandButtons;
+    int selectedEqBand { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Live32ChannelAudioProcessorEditor)
 };

@@ -29,25 +29,25 @@ float toDb(float linear)
 }
 
 Live32ChannelAudioProcessorEditor::Live32ChannelAudioProcessorEditor(Live32ChannelAudioProcessor& p)
-    : juce::AudioProcessorEditor(&p), processor(p), eqCurve(p.parameters)
+    : juce::AudioProcessorEditor(&p), processor(p), eqCurve(p.parameters), dynamicsCurve(p.parameters)
 {
     setLookAndFeel(&lookAndFeel);
     setResizable(true, true);
     setResizeLimits(980, 600, 1600, 1000);
 
     addKnob("trim", "GAIN", " dB", 1);
-    addKnob("hpfHz", "LOW CUT", " Hz", 0);
+    addKnob("hpfHz", "FREQUENCY", " Hz", 0);
     addToggle("phase", "Ø");
     addToggle("hpfOn", "LOW CUT");
 
-    addKnob("gateThreshold", "THRESH", " dB", 1);
+    addKnob("gateThreshold", "THRESHOLD", " dB", 1);
     addKnob("gateRange", "RANGE", " dB", 0);
     addKnob("gateAttack", "ATTACK", " ms", 1);
     addKnob("gateHold", "HOLD", " ms", 0);
     addKnob("gateRelease", "RELEASE", " ms", 0);
     addToggle("gateOn", "GATE");
 
-    addKnob("compThreshold", "THRESH", " dB", 1);
+    addKnob("compThreshold", "THRESHOLD", " dB", 1);
     addKnob("compRatio", "RATIO", ":1", 1);
     addKnob("compAttack", "ATTACK", " ms", 1);
     addKnob("compRelease", "RELEASE", " ms", 0);
@@ -59,36 +59,46 @@ Live32ChannelAudioProcessorEditor::Live32ChannelAudioProcessorEditor(Live32Chann
     addToggle("externalKey", "EXT KEY");
 
     addToggle("eqOn", "EQ");
-    addKnob("lowHz", "FREQ", " Hz", 0);
+    addKnob("lowHz", "FREQUENCY", " Hz", 0);
     addKnob("lowGain", "GAIN", " dB", 1);
     addKnob("lowQ", "WIDTH", {}, 2);
-    addChoice("lowMode", "LOW", { "LCUT", "LSHV", "PEQ" });
+    addChoice("lowMode", "MODE", { "LCUT", "LSHV", "PEQ" });
 
-    addKnob("lowMidHz", "FREQ", " Hz", 0);
+    addKnob("lowMidHz", "FREQUENCY", " Hz", 0);
     addKnob("lowMidGain", "GAIN", " dB", 1);
     addKnob("lowMidQ", "WIDTH", {}, 2);
-    addChoice("lowMidMode", "LO MID", { "VEQ", "PEQ" });
+    addChoice("lowMidMode", "MODE", { "VEQ", "PEQ" });
 
-    addKnob("highMidHz", "FREQ", " Hz", 0);
+    addKnob("highMidHz", "FREQUENCY", " Hz", 0);
     addKnob("highMidGain", "GAIN", " dB", 1);
     addKnob("highMidQ", "WIDTH", {}, 2);
-    addChoice("highMidMode", "HI MID", { "VEQ", "PEQ" });
+    addChoice("highMidMode", "MODE", { "VEQ", "PEQ" });
 
-    addKnob("highHz", "FREQ", " Hz", 0);
+    addKnob("highHz", "FREQUENCY", " Hz", 0);
     addKnob("highGain", "GAIN", " dB", 1);
     addKnob("highQ", "WIDTH", {}, 2);
-    addChoice("highMode", "HIGH", { "PEQ", "HSHV", "HCUT" });
+    addChoice("highMode", "MODE", { "PEQ", "HSHV", "HCUT" });
+
+    static constexpr const char* bandNames[] = { "LOW", "LO MID", "HI MID", "HIGH" };
+    for (int i = 0; i < 4; ++i)
+    {
+        eqBandButtons[static_cast<std::size_t>(i)] = std::make_unique<juce::ToggleButton>(bandNames[i]);
+        auto& b = *eqBandButtons[static_cast<std::size_t>(i)];
+        b.setClickingTogglesState(true);
+        b.setRadioGroupId(3201, juce::dontSendNotification);
+        b.onClick = [this, i] { selectEqBand(i); };
+        addAndMakeVisible(b);
+    }
 
     addAndMakeVisible(eqCurve);
+    addAndMakeVisible(dynamicsCurve);
     addAndMakeVisible(meters);
 
-    // Size the editor only after all dynamically-created controls exist.
-    // setSize() triggers resized(); doing this earlier leaves the knobs,
-    // buttons and combo boxes at zero bounds on hosts that accept our
-    // requested size without issuing a second resize (observed in REAPER).
-    setSize(1280, 720);
-    resized(); // explicit for hosts/platforms that coalesce the initial resize
+    selectEqBand(0);
 
+    // Size only after every dynamic control exists. setSize() triggers resized().
+    setSize(1280, 720);
+    resized();
     startTimerHz(30);
 }
 
@@ -105,9 +115,16 @@ Live32ChannelAudioProcessorEditor::addKnob(const juce::String& id, const juce::S
     c->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     c->slider.setRotaryParameters(juce::MathConstants<float>::pi * 1.22f,
                                   juce::MathConstants<float>::pi * 2.78f, true);
-    c->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 76, 18);
-    c->slider.setTextValueSuffix(suffix);
+    c->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 82, 18);
     c->slider.setNumDecimalPlacesToDisplay(decimals);
+    c->slider.textFromValueFunction = [suffix, decimals](double value)
+    {
+        return juce::String(value, decimals) + suffix;
+    };
+    c->slider.valueFromTextFunction = [](const juce::String& textValue)
+    {
+        return textValue.getDoubleValue();
+    };
     c->label.setText(text, juce::dontSendNotification);
     c->label.setJustificationType(juce::Justification::centred);
     c->label.setColour(juce::Label::textColourId, juce::Colour(0xffd9dddf));
@@ -176,10 +193,11 @@ void Live32ChannelAudioProcessorEditor::paint(juce::Graphics& g)
                                     juce::roundToInt(w * sx), juce::roundToInt(h * sy));
     };
 
-    drawSection(g, scaled(10, 60, 185, 650), "PREAMP");
-    drawSection(g, scaled(202, 60, 255, 650), "GATE");
-    drawSection(g, scaled(464, 60, 318, 650), "DYNAMICS");
-    drawSection(g, scaled(789, 60, 481, 650), "EQUALISER");
+    // Desk-like physical geography: PREAMP over GATE, EQ over DYNAMICS.
+    drawSection(g, scaled(10, 60, 390, 285), "CONFIG / PREAMP");
+    drawSection(g, scaled(408, 60, 862, 360), "EQUALISER");
+    drawSection(g, scaled(10, 353, 390, 357), "GATE");
+    drawSection(g, scaled(408, 428, 862, 282), "DYNAMICS");
 }
 
 void Live32ChannelAudioProcessorEditor::layoutKnob(const char* id, juce::Rectangle<int> r)
@@ -203,6 +221,42 @@ void Live32ChannelAudioProcessorEditor::layoutChoice(const char* id, juce::Recta
     c.combo.setBounds(r);
 }
 
+void Live32ChannelAudioProcessorEditor::selectEqBand(int band)
+{
+    selectedEqBand = juce::jlimit(0, 3, band);
+    for (int i = 0; i < 4; ++i)
+        eqBandButtons[static_cast<std::size_t>(i)]->setToggleState(i == selectedEqBand, juce::dontSendNotification);
+    updateEqBandVisibility();
+    resized();
+    repaint();
+}
+
+void Live32ChannelAudioProcessorEditor::updateEqBandVisibility()
+{
+    static constexpr const char* freq[] = { "lowHz", "lowMidHz", "highMidHz", "highHz" };
+    static constexpr const char* gain[] = { "lowGain", "lowMidGain", "highMidGain", "highGain" };
+    static constexpr const char* width[] = { "lowQ", "lowMidQ", "highMidQ", "highQ" };
+    static constexpr const char* mode[] = { "lowMode", "lowMidMode", "highMidMode", "highMode" };
+
+    for (int i = 0; i < 4; ++i)
+    {
+        const bool visible = i == selectedEqBand;
+        for (auto* id : { freq[i], gain[i], width[i] })
+        {
+            if (auto it = knobs.find(id); it != knobs.end())
+            {
+                it->second->slider.setVisible(visible);
+                it->second->label.setVisible(visible);
+            }
+        }
+        if (auto it = choices.find(mode[i]); it != choices.end())
+        {
+            it->second->combo.setVisible(visible);
+            it->second->label.setVisible(visible);
+        }
+    }
+}
+
 void Live32ChannelAudioProcessorEditor::resized()
 {
     const float sx = getWidth() / 1280.0f;
@@ -213,55 +267,59 @@ void Live32ChannelAudioProcessorEditor::resized()
                                     juce::roundToInt(w * sx), juce::roundToInt(h * sy));
     };
 
-    // PREAMP
-    layoutKnob("trim", R(34, 112, 136, 130));
-    layoutKnob("hpfHz", R(34, 275, 136, 130));
-    layoutToggle("phase", R(38, 440, 55, 28));
-    layoutToggle("hpfOn", R(102, 440, 65, 28));
-    meters.setBounds(R(31, 500, 142, 178));
+    // PREAMP: two large hardware-style encoders and the desk switches.
+    layoutKnob("trim", R(28, 108, 130, 128));
+    layoutKnob("hpfHz", R(166, 108, 130, 128));
+    layoutToggle("phase", R(48, 270, 72, 30));
+    layoutToggle("hpfOn", R(176, 270, 92, 30));
+    meters.setBounds(R(305, 104, 78, 205));
 
-    // GATE
-    layoutToggle("gateOn", R(222, 101, 75, 28));
-    layoutKnob("gateThreshold", R(220, 145, 104, 122));
-    layoutKnob("gateRange", R(330, 145, 104, 122));
-    layoutKnob("gateAttack", R(220, 303, 104, 122));
-    layoutKnob("gateHold", R(330, 303, 104, 122));
-    layoutKnob("gateRelease", R(273, 461, 104, 122));
+    // GATE: threshold is the prominent surface control; detailed timing remains close by.
+    layoutKnob("gateThreshold", R(28, 405, 130, 128));
+    layoutToggle("gateOn", R(51, 548, 84, 30));
+    layoutKnob("gateRange", R(165, 395, 96, 112));
+    layoutKnob("gateAttack", R(276, 395, 96, 112));
+    layoutKnob("gateHold", R(165, 535, 96, 112));
+    layoutKnob("gateRelease", R(276, 535, 96, 112));
 
-    // DYNAMICS
-    layoutToggle("compOn", R(485, 101, 76, 28));
-    layoutKnob("compThreshold", R(484, 145, 90, 118));
-    layoutKnob("compRatio", R(578, 145, 90, 118));
-    layoutKnob("compKnee", R(672, 145, 90, 118));
-    layoutKnob("compAttack", R(484, 298, 90, 118));
-    layoutKnob("compRelease", R(578, 298, 90, 118));
-    layoutKnob("compMakeup", R(672, 298, 90, 118));
-    layoutToggle("keyFilterOn", R(485, 468, 92, 27));
-    layoutToggle("externalKey", R(584, 468, 83, 27));
-    layoutKnob("keyFilterHz", R(665, 448, 96, 122));
+    // EQ: graph on the left, then the same WIDTH/FREQUENCY/GAIN control stack
+    // and four band-select keys used on the physical desk.
+    eqCurve.setBounds(R(430, 102, 500, 260));
+    layoutToggle("eqOn", R(1140, 354, 78, 30));
 
-    // EQ
-    layoutToggle("eqOn", R(808, 100, 62, 28));
-    eqCurve.setBounds(R(873, 98, 376, 178));
+    static constexpr const char* freq[] = { "lowHz", "lowMidHz", "highMidHz", "highHz" };
+    static constexpr const char* gain[] = { "lowGain", "lowMidGain", "highMidGain", "highGain" };
+    static constexpr const char* width[] = { "lowQ", "lowMidQ", "highMidQ", "highQ" };
+    static constexpr const char* mode[] = { "lowMode", "lowMidMode", "highMidMode", "highMode" };
 
-    const int xs[] = { 808, 920, 1032, 1144 };
-    const char* freq[] = { "lowHz", "lowMidHz", "highMidHz", "highHz" };
-    const char* gain[] = { "lowGain", "lowMidGain", "highMidGain", "highGain" };
-    const char* q[] = { "lowQ", "lowMidQ", "highMidQ", "highQ" };
-    const char* mode[] = { "lowMode", "lowMidMode", "highMidMode", "highMode" };
+    layoutKnob(width[selectedEqBand], R(944, 92, 118, 100));
+    layoutKnob(freq[selectedEqBand], R(944, 190, 118, 100));
+    layoutKnob(gain[selectedEqBand], R(944, 288, 118, 100));
+    layoutChoice(mode[selectedEqBand], R(1074, 314, 94, 54));
+
     for (int i = 0; i < 4; ++i)
-    {
-        layoutChoice(mode[i], R(xs[i], 292, 92, 48));
-        layoutKnob(freq[i], R(xs[i], 354, 92, 105));
-        layoutKnob(gain[i], R(xs[i], 470, 92, 105));
-        layoutKnob(q[i], R(xs[i], 586, 92, 105));
-    }
+        eqBandButtons[static_cast<std::size_t>(i)]->setBounds(R(1168, 105 + i * 54, 82, 34));
+
+    // DYNAMICS: M32-style prominent threshold/COMP controls plus an LCD-like
+    // transfer graph and the detailed compressor controls alongside.
+    dynamicsCurve.setBounds(R(430, 468, 312, 205));
+    layoutKnob("compThreshold", R(758, 472, 112, 112));
+    layoutToggle("compOn", R(774, 592, 80, 30));
+    layoutKnob("compRatio", R(875, 472, 92, 102));
+    layoutKnob("compKnee", R(973, 472, 92, 102));
+    layoutKnob("keyFilterHz", R(1071, 472, 92, 102));
+    layoutKnob("compAttack", R(875, 585, 92, 102));
+    layoutKnob("compRelease", R(973, 585, 92, 102));
+    layoutKnob("compMakeup", R(1071, 585, 92, 102));
+    layoutToggle("keyFilterOn", R(1172, 506, 82, 28));
+    layoutToggle("externalKey", R(1172, 544, 82, 28));
 }
 
 void Live32ChannelAudioProcessorEditor::timerCallback()
 {
-    meters.setValues(processor.getInputMeter(), processor.getOutputMeter(),
-                     processor.getGainReductionMeter(), processor.getGateClosedMeter());
+    const auto gr = processor.getGainReductionMeter();
+    meters.setValues(processor.getInputMeter(), processor.getOutputMeter(), gr, processor.getGateClosedMeter());
+    dynamicsCurve.setGainReduction(gr);
     eqCurve.repaint();
 }
 
@@ -273,31 +331,136 @@ void Live32ChannelAudioProcessorEditor::MeterPanel::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xff3e4448));
     g.drawRoundedRectangle(r.reduced(0.5f), 4.0f, 1.0f);
 
-    g.setFont(juce::FontOptions(9.5f, juce::Font::bold));
-    const auto drawMeter = [&](float x, float level, const char* name)
+    g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
+    const float top = 25.0f;
+    const float bottomMargin = 34.0f;
+    const float h = juce::jmax(30.0f, r.getHeight() - top - bottomMargin);
+    const float meterW = juce::jlimit(7.0f, 14.0f, r.getWidth() * 0.14f);
+    const float centres[] = { r.getWidth() * 0.22f, r.getWidth() * 0.50f, r.getWidth() * 0.78f };
+
+    const auto drawLevel = [&](int index, float level, const char* name)
     {
-        const float top = 24.0f, h = r.getHeight() - 48.0f, w = 19.0f;
         const float db = toDb(level);
         const float norm = juce::jlimit(0.0f, 1.0f, (db + 60.0f) / 60.0f);
-        juce::Rectangle<float> track(x, top, w, h);
-        g.setColour(juce::Colour(0xff080a0b)); g.fillRect(track);
-        auto fill = track.withTrimmedTop(h * (1.0f - norm));
-        g.setColour(db > -3.0f ? juce::Colour(0xffff6734) : juce::Colour(0xffffa800)); g.fillRect(fill);
-        g.setColour(juce::Colour(0xffcdd1d4)); g.drawText(name, static_cast<int>(x - 4), 5, 28, 15, juce::Justification::centred);
+        juce::Rectangle<float> track(centres[index] - meterW * 0.5f, top, meterW, h);
+        g.setColour(juce::Colour(0xff080a0b));
+        g.fillRect(track);
+        g.setColour(db > -3.0f ? juce::Colour(0xffff6734) : juce::Colour(0xffffa800));
+        g.fillRect(track.withTrimmedTop(h * (1.0f - norm)));
+        g.setColour(juce::Colour(0xffcdd1d4));
+        g.drawText(name, juce::Rectangle<int>(juce::roundToInt(centres[index] - 14.0f), 5, 28, 14), juce::Justification::centred);
     };
 
-    drawMeter(17.0f, input, "IN");
-    drawMeter(48.0f, output, "OUT");
+    drawLevel(0, input, "IN");
+    drawLevel(1, output, "OUT");
 
     g.setColour(juce::Colour(0xffcdd1d4));
-    g.drawText("GR", 80, 5, 28, 15, juce::Justification::centred);
+    g.drawText("GR", juce::Rectangle<int>(juce::roundToInt(centres[2] - 14.0f), 5, 28, 14), juce::Justification::centred);
     const float grNorm = juce::jlimit(0.0f, 1.0f, gainReduction / 24.0f);
-    juce::Rectangle<float> gr(86.0f, 24.0f, 16.0f, r.getHeight() - 48.0f);
-    g.setColour(juce::Colour(0xff080a0b)); g.fillRect(gr);
-    g.setColour(juce::Colour(0xffffa800)); g.fillRect(gr.withHeight(gr.getHeight() * grNorm));
+    juce::Rectangle<float> gr(centres[2] - meterW * 0.5f, top, meterW, h);
+    g.setColour(juce::Colour(0xff080a0b));
+    g.fillRect(gr);
+    g.setColour(juce::Colour(0xffffa800));
+    g.fillRect(gr.withHeight(gr.getHeight() * grNorm));
 
     g.setColour(gateClosed > 0.5f ? juce::Colour(0xffffa800) : juce::Colour(0xff353a3e));
-    g.fillEllipse(r.getWidth() - 27.0f, 8.0f, 10.0f, 10.0f);
+    g.fillEllipse(r.getWidth() * 0.5f - 5.0f, r.getHeight() - 24.0f, 10.0f, 10.0f);
     g.setColour(juce::Colour(0xffaeb4b8));
-    g.drawText("GATE", 76, static_cast<int>(r.getHeight() - 22), 50, 14, juce::Justification::centred);
+    g.drawText("GATE", 0, static_cast<int>(r.getHeight() - 17.0f), static_cast<int>(r.getWidth()), 14, juce::Justification::centred);
+}
+
+float Live32ChannelAudioProcessorEditor::DynamicsCurve::raw(const char* id) const noexcept
+{
+    if (auto* p = parameters.getRawParameterValue(id)) return p->load();
+    return 0.0f;
+}
+
+double Live32ChannelAudioProcessorEditor::DynamicsCurve::outputForInput(double inputDb) const noexcept
+{
+    const double threshold = raw("compThreshold");
+    const double ratio = juce::jmax(1.0, static_cast<double>(raw("compRatio")));
+    const double knee = static_cast<double>(raw("compKnee")) * 3.0;
+    const double makeup = raw("compMakeup");
+    const double xDb = inputDb - threshold;
+    double reductionDb = 0.0;
+
+    if (knee <= 0.0)
+    {
+        if (xDb > 0.0)
+            reductionDb = xDb * (1.0 / ratio - 1.0);
+    }
+    else if (xDb <= -knee * 0.5)
+    {
+        reductionDb = 0.0;
+    }
+    else if (xDb >= knee * 0.5)
+    {
+        reductionDb = xDb * (1.0 / ratio - 1.0);
+    }
+    else
+    {
+        const double t = xDb + knee * 0.5;
+        reductionDb = (1.0 / ratio - 1.0) * t * t / (2.0 * knee);
+    }
+
+    return inputDb + reductionDb + makeup;
+}
+
+void Live32ChannelAudioProcessorEditor::DynamicsCurve::paint(juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat().reduced(1.0f);
+    g.setColour(juce::Colour(0xff080b0d));
+    g.fillRoundedRectangle(r, 4.0f);
+    g.setColour(juce::Colour(0xff3b4348));
+    g.drawRoundedRectangle(r, 4.0f, 1.0f);
+
+    auto graph = r.reduced(12.0f, 18.0f);
+    constexpr double xMin = -60.0, xMax = 6.0;
+    constexpr double yMin = -60.0, yMax = 12.0;
+    const auto xForDb = [graph](double db)
+    {
+        return graph.getX() + static_cast<float>((db - xMin) / (xMax - xMin)) * graph.getWidth();
+    };
+    const auto yForDb = [graph](double db)
+    {
+        return graph.getBottom() - static_cast<float>((db - yMin) / (yMax - yMin)) * graph.getHeight();
+    };
+
+    for (double db : { -48.0, -36.0, -24.0, -12.0, 0.0 })
+    {
+        g.setColour(juce::Colour(0xff263038));
+        g.drawVerticalLine(static_cast<int>(xForDb(db)), graph.getY(), graph.getBottom());
+        g.drawHorizontalLine(static_cast<int>(yForDb(db)), graph.getX(), graph.getRight());
+    }
+
+    juce::Path unity;
+    unity.startNewSubPath(xForDb(xMin), yForDb(xMin));
+    unity.lineTo(xForDb(xMax), yForDb(xMax));
+    g.setColour(juce::Colour(0xff586168));
+    g.strokePath(unity, juce::PathStrokeType(1.0f));
+
+    const bool enabled = raw("compOn") >= 0.5f;
+    juce::Path curve;
+    constexpr int points = 160;
+    for (int i = 0; i < points; ++i)
+    {
+        const double inDb = xMin + (xMax - xMin) * static_cast<double>(i) / static_cast<double>(points - 1);
+        const double outDb = enabled ? outputForInput(inDb) : inDb + raw("compMakeup");
+        const float x = xForDb(inDb);
+        const float y = yForDb(juce::jlimit(yMin, yMax, outDb));
+        if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
+    }
+
+    const double threshold = raw("compThreshold");
+    g.setColour(juce::Colour(0x88ffa800));
+    g.drawVerticalLine(static_cast<int>(xForDb(threshold)), graph.getY(), graph.getBottom());
+
+    g.setColour(enabled ? juce::Colour(0xffffb21a) : juce::Colour(0xff70777c));
+    g.strokePath(curve, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    g.setColour(enabled ? juce::Colour(0xffffb21a) : juce::Colour(0xff858b90));
+    g.drawText(enabled ? "COMP TRANSFER" : "COMP OFF", 10, 4, 130, 15, juce::Justification::centredLeft);
+    g.setColour(juce::Colour(0xffd9dddf));
+    g.drawText("GR " + juce::String(gainReduction, 1) + " dB", getWidth() - 90, 4, 80, 15, juce::Justification::centredRight);
 }
