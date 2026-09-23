@@ -32,9 +32,10 @@ Live32ChannelAudioProcessorEditor::Live32ChannelAudioProcessorEditor(Live32Chann
     : juce::AudioProcessorEditor(&p), processor(p), eqCurve(p.parameters), dynamicsCurve(p.parameters)
 {
     setLookAndFeel(&lookAndFeel);
-    setResizable(true, true);
-    setResizeLimits(980, 600, 1600, 1000);
 
+    // IMPORTANT: do not enable host resizing until all dynamically-created
+    // controls exist. Some hosts (including REAPER) may trigger resized()
+    // immediately from setResizable()/setResizeLimits().
     addKnob("trim", "GAIN", " dB", 1);
     addKnob("hpfHz", "FREQUENCY", " Hz", 0);
     addToggle("phase", "Ø");
@@ -94,11 +95,18 @@ Live32ChannelAudioProcessorEditor::Live32ChannelAudioProcessorEditor(Live32Chann
     addAndMakeVisible(dynamicsCurve);
     addAndMakeVisible(meters);
 
-    selectEqBand(0);
+    // Establish the initial EQ-band state without forcing an early resized().
+    selectedEqBand = 0;
+    for (int i = 0; i < 4; ++i)
+        if (auto* b = eqBandButtons[static_cast<std::size_t>(i)].get())
+            b->setToggleState(i == selectedEqBand, juce::dontSendNotification);
+    updateEqBandVisibility();
 
-    // Size only after every dynamic control exists. setSize() triggers resized().
+    // Size and enable host resizing only after every dynamic control exists.
+    // setSize() triggers the first safe resized() call.
     setSize(1280, 720);
-    resized();
+    setResizable(true, true);
+    setResizeLimits(980, 600, 1600, 1000);
     startTimerHz(30);
 }
 
@@ -225,9 +233,16 @@ void Live32ChannelAudioProcessorEditor::selectEqBand(int band)
 {
     selectedEqBand = juce::jlimit(0, 3, band);
     for (int i = 0; i < 4; ++i)
-        eqBandButtons[static_cast<std::size_t>(i)]->setToggleState(i == selectedEqBand, juce::dontSendNotification);
+        if (auto* b = eqBandButtons[static_cast<std::size_t>(i)].get())
+            b->setToggleState(i == selectedEqBand, juce::dontSendNotification);
+
     updateEqBandVisibility();
-    resized();
+
+    // During construction a host may request layout before the editor has a
+    // useful size. Avoid forcing layout until the component is established.
+    if (getWidth() > 0 && getHeight() > 52)
+        resized();
+
     repaint();
 }
 
@@ -259,6 +274,12 @@ void Live32ChannelAudioProcessorEditor::updateEqBandVisibility()
 
 void Live32ChannelAudioProcessorEditor::resized()
 {
+    // resized() can be called by a host very early in editor construction.
+    // Keep this function safe even if the editor or dynamic controls are not
+    // fully initialised yet.
+    if (getWidth() <= 0 || getHeight() <= 52)
+        return;
+
     const float sx = getWidth() / 1280.0f;
     const float sy = (getHeight() - 52.0f) / 668.0f;
     auto R = [sx, sy](int x, int y, int w, int h)
@@ -298,7 +319,8 @@ void Live32ChannelAudioProcessorEditor::resized()
     layoutChoice(mode[selectedEqBand], R(1074, 314, 94, 54));
 
     for (int i = 0; i < 4; ++i)
-        eqBandButtons[static_cast<std::size_t>(i)]->setBounds(R(1168, 105 + i * 54, 82, 34));
+        if (auto* b = eqBandButtons[static_cast<std::size_t>(i)].get())
+            b->setBounds(R(1168, 105 + i * 54, 82, 34));
 
     // DYNAMICS: M32-style prominent threshold/COMP controls plus an LCD-like
     // transfer graph and the detailed compressor controls alongside.

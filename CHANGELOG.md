@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+- Fixed a REAPER editor-instantiation crash introduced by the v0.2 desk-style GUI.
+- Dynamic EQ band buttons are now created before host resizing is enabled.
+- `resized()` and EQ-band selection now guard against early host callbacks and uninitialised button pointers.
+- No DSP changes; this is a GUI-lifecycle safety fix.
+
 ## 0.2.1
 - Fixed the Windows/MSVC build failure in the new compressor transfer-curve display.
 - Explicitly capture the graph dB range constants in the coordinate-mapping lambdas used by `DynamicsCurve::paint()`.
