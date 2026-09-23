@@ -1,0 +1,8 @@
+build/
+.vscode/
+.idea/
+*.user
+*.suo
+*.VC.db
+.DS_Store
+live32_dsp_test

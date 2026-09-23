@@ -1,4 +1,4 @@
-# Live32 Channel v0.2.0 — VST3 prototype
+# Live32 Channel v0.2.1 — VST3 prototype
 
 **Live32 Channel** is the first stand-alone plug-in spin-off from Live32: a digital live-console channel strip based on the same custom DSP used by the REAPER/JSFX project.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+- Fixed the Windows/MSVC build failure in the new compressor transfer-curve display.
+- Explicitly capture the graph dB range constants in the coordinate-mapping lambdas used by `DynamicsCurve::paint()`.
+- No DSP or UI-design changes from 0.2.0; this is a compile-fix release.
+
 ## 0.2.0
 - Reworked the plug-in layout to follow the physical M32 channel-strip geography much more closely: CONFIG/PREAMP over GATE, EQUALISER over DYNAMICS.
 - Replaced the four simultaneous EQ control columns with one hardware-style WIDTH / FREQUENCY / GAIN control stack and LOW / LO MID / HI MID / HIGH band-selection keys.
