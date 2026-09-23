@@ -34,7 +34,6 @@ Live32ChannelAudioProcessorEditor::Live32ChannelAudioProcessorEditor(Live32Chann
     setLookAndFeel(&lookAndFeel);
     setResizable(true, true);
     setResizeLimits(980, 600, 1600, 1000);
-    setSize(1280, 720);
 
     addKnob("trim", "GAIN", " dB", 1);
     addKnob("hpfHz", "LOW CUT", " Hz", 0);
@@ -82,6 +81,14 @@ Live32ChannelAudioProcessorEditor::Live32ChannelAudioProcessorEditor(Live32Chann
 
     addAndMakeVisible(eqCurve);
     addAndMakeVisible(meters);
+
+    // Size the editor only after all dynamically-created controls exist.
+    // setSize() triggers resized(); doing this earlier leaves the knobs,
+    // buttons and combo boxes at zero bounds on hosts that accept our
+    // requested size without issuing a second resize (observed in REAPER).
+    setSize(1280, 720);
+    resized(); // explicit for hosts/platforms that coalesce the initial resize
+
     startTimerHz(30);
 }
 
