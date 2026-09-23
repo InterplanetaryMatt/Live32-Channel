@@ -1,4 +1,4 @@
-# Live32 Channel v0.1.0 — VST3 prototype
+# Live32 Channel v0.2.0 — VST3 prototype
 
 **Live32 Channel** is the first stand-alone plug-in spin-off from Live32: a digital live-console channel strip based on the same custom DSP used by the REAPER/JSFX project.
 
@@ -33,8 +33,10 @@ The interface uses independent **LIVE32 CHANNEL** branding but deliberately foll
 - dark console surface
 - silver/black encoders
 - segmented amber LED rings
-- PREAMP, GATE, DYNAMICS and EQUALISER sections
-- live EQ response display
+- desk-like physical layout: CONFIG/PREAMP above GATE, EQUALISER above DYNAMICS
+- single M32-style EQ hardware control stack (WIDTH / FREQUENCY / GAIN) with LOW / LO MID / HI MID / HIGH band-select keys
+- live EQ response display including the dedicated 24 dB/oct LOW CUT
+- live compressor transfer-curve display with gain-reduction readout
 
 It does not use Midas logos or proprietary artwork.
 
@@ -99,7 +101,7 @@ On Linux/macOS with a compiler available, run:
 - Parameter changes currently update coefficients once per audio block; smoothing/zipper-noise work is a later polish step.
 - EQ display uses a 48 kHz visual reference. DSP itself uses the actual host sample rate.
 - The compressor behaviour intentionally follows the current Live32 JSFX, including its existing makeup-gain behaviour.
-- The GUI is the first pass, not the final artwork.
+- The GUI is still a development design and will continue to be refined against real-console workflow feedback.
 
 ## Next targets
 
