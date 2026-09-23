@@ -138,6 +138,21 @@ Live32ChannelAudioProcessorEditor::addKnob(const juce::String& id, const juce::S
     c->label.setColour(juce::Label::textColourId, juce::Colour(0xffd9dddf));
     c->label.setFont(juce::FontOptions(10.5f, juce::Font::bold));
     c->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.parameters, id, c->slider);
+
+    // SliderParameterAttachment may install parameter-driven text conversion.
+    // Re-apply Live32's compact desk-style formatting afterwards so values
+    // remain readable (e.g. "103 Hz", "5.0 ms", "4.3:1") rather than showing
+    // the parameter's full floating-point precision.
+    c->slider.setNumDecimalPlacesToDisplay(decimals);
+    c->slider.textFromValueFunction = [suffix, decimals](double value)
+    {
+        return juce::String(value, decimals) + suffix;
+    };
+    c->slider.valueFromTextFunction = [](const juce::String& textValue)
+    {
+        return textValue.getDoubleValue();
+    };
+
     addAndMakeVisible(c->slider);
     addAndMakeVisible(c->label);
     auto& ref = *c;
@@ -201,11 +216,25 @@ void Live32ChannelAudioProcessorEditor::paint(juce::Graphics& g)
                                     juce::roundToInt(w * sx), juce::roundToInt(h * sy));
     };
 
-    // Desk-like physical geography: PREAMP over GATE, EQ over DYNAMICS.
-    drawSection(g, scaled(10, 60, 390, 285), "CONFIG / PREAMP");
-    drawSection(g, scaled(408, 60, 862, 360), "EQUALISER");
-    drawSection(g, scaled(10, 353, 390, 357), "GATE");
-    drawSection(g, scaled(408, 428, 862, 282), "DYNAMICS");
+    // Physical-console geography: hardware controls occupy the left/middle,
+    // while the visual feedback lives together in an LCD-style window at right.
+    drawSection(g, scaled(10, 60, 300, 285), "CONFIG / PREAMP");
+    drawSection(g, scaled(318, 60, 480, 285), "EQUALISER");
+    drawSection(g, scaled(10, 353, 300, 357), "GATE");
+    drawSection(g, scaled(318, 353, 480, 357), "DYNAMICS");
+    drawSection(g, scaled(806, 60, 464, 650), "CHANNEL DISPLAY");
+
+    // LCD divider and small page labels.
+    auto lcd = scaled(820, 96, 436, 595);
+    g.setColour(juce::Colour(0xff101417));
+    g.fillRoundedRectangle(lcd.toFloat(), 4.0f);
+    g.setColour(juce::Colour(0xff3b4348));
+    g.drawRoundedRectangle(lcd.toFloat().reduced(0.5f), 4.0f, 1.0f);
+
+    g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    g.setColour(amber);
+    g.drawText("EQUALISER", scaled(832, 102, 110, 16), juce::Justification::centredLeft);
+    g.drawText("DYNAMICS", scaled(832, 386, 110, 16), juce::Justification::centredLeft);
 }
 
 void Live32ChannelAudioProcessorEditor::layoutKnob(const char* id, juce::Rectangle<int> r)
@@ -274,9 +303,7 @@ void Live32ChannelAudioProcessorEditor::updateEqBandVisibility()
 
 void Live32ChannelAudioProcessorEditor::resized()
 {
-    // resized() can be called by a host very early in editor construction.
-    // Keep this function safe even if the editor or dynamic controls are not
-    // fully initialised yet.
+    // Hosts are allowed to call resized() during editor construction.
     if (getWidth() <= 0 || getHeight() <= 52)
         return;
 
@@ -288,55 +315,57 @@ void Live32ChannelAudioProcessorEditor::resized()
                                     juce::roundToInt(w * sx), juce::roundToInt(h * sy));
     };
 
-    // PREAMP: two large hardware-style encoders and the desk switches.
-    layoutKnob("trim", R(28, 108, 130, 128));
-    layoutKnob("hpfHz", R(166, 108, 130, 128));
-    layoutToggle("phase", R(48, 270, 72, 30));
-    layoutToggle("hpfOn", R(176, 270, 92, 30));
-    meters.setBounds(R(305, 104, 78, 205));
+    // CONFIG / PREAMP — close to the physical surface: gain, low-cut frequency,
+    // phase and LOW CUT switch, with compact metering alongside.
+    layoutKnob("trim",  R(26, 110, 112, 122));
+    layoutKnob("hpfHz", R(150, 110, 112, 122));
+    layoutToggle("phase", R(40, 268, 74, 30));
+    layoutToggle("hpfOn", R(151, 268, 92, 30));
+    meters.setBounds(R(250, 105, 48, 202));
 
-    // GATE: threshold is the prominent surface control; detailed timing remains close by.
-    layoutKnob("gateThreshold", R(28, 405, 130, 128));
-    layoutToggle("gateOn", R(51, 548, 84, 30));
-    layoutKnob("gateRange", R(165, 395, 96, 112));
-    layoutKnob("gateAttack", R(276, 395, 96, 112));
-    layoutKnob("gateHold", R(165, 535, 96, 112));
-    layoutKnob("gateRelease", R(276, 535, 96, 112));
+    // GATE — threshold remains the large surface control; detailed controls
+    // are arranged around it rather than taking over the panel.
+    layoutKnob("gateThreshold", R(24, 400, 116, 124));
+    layoutToggle("gateOn", R(42, 545, 82, 30));
+    layoutKnob("gateRange",   R(150, 390, 70, 106));
+    layoutKnob("gateAttack",  R(226, 390, 70, 106));
+    layoutKnob("gateHold",    R(150, 520, 70, 106));
+    layoutKnob("gateRelease", R(226, 520, 70, 106));
 
-    // EQ: graph on the left, then the same WIDTH/FREQUENCY/GAIN control stack
-    // and four band-select keys used on the physical desk.
-    eqCurve.setBounds(R(430, 102, 500, 260));
-    layoutToggle("eqOn", R(1140, 354, 78, 30));
-
-    static constexpr const char* freq[] = { "lowHz", "lowMidHz", "highMidHz", "highHz" };
-    static constexpr const char* gain[] = { "lowGain", "lowMidGain", "highMidGain", "highGain" };
+    // EQUALISER — emulate the M32 surface relationship: MODE at the left,
+    // WIDTH / FREQUENCY / GAIN down the centre and four band keys at right.
+    static constexpr const char* freq[]  = { "lowHz", "lowMidHz", "highMidHz", "highHz" };
+    static constexpr const char* gain[]  = { "lowGain", "lowMidGain", "highMidGain", "highGain" };
     static constexpr const char* width[] = { "lowQ", "lowMidQ", "highMidQ", "highQ" };
-    static constexpr const char* mode[] = { "lowMode", "lowMidMode", "highMidMode", "highMode" };
+    static constexpr const char* mode[]  = { "lowMode", "lowMidMode", "highMidMode", "highMode" };
 
-    layoutKnob(width[selectedEqBand], R(944, 92, 118, 100));
-    layoutKnob(freq[selectedEqBand], R(944, 190, 118, 100));
-    layoutKnob(gain[selectedEqBand], R(944, 288, 118, 100));
-    layoutChoice(mode[selectedEqBand], R(1074, 314, 94, 54));
+    layoutChoice(mode[selectedEqBand], R(334, 172, 92, 56));
+    layoutKnob(width[selectedEqBand],  R(454, 84, 112, 96));
+    layoutKnob(freq[selectedEqBand],   R(454, 166, 112, 96));
+    layoutKnob(gain[selectedEqBand],   R(454, 248, 112, 96));
+    layoutToggle("eqOn", R(590, 270, 74, 30));
 
     for (int i = 0; i < 4; ++i)
         if (auto* b = eqBandButtons[static_cast<std::size_t>(i)].get())
-            b->setBounds(R(1168, 105 + i * 54, 82, 34));
+            b->setBounds(R(690, 92 + i * 54, 86, 34));
 
-    // DYNAMICS: M32-style prominent threshold/COMP controls plus an LCD-like
-    // transfer graph and the detailed compressor controls alongside.
-    dynamicsCurve.setBounds(R(430, 468, 312, 205));
-    layoutKnob("compThreshold", R(758, 472, 112, 112));
-    layoutToggle("compOn", R(774, 592, 80, 30));
-    layoutKnob("compRatio", R(875, 472, 92, 102));
-    layoutKnob("compKnee", R(973, 472, 92, 102));
-    layoutKnob("keyFilterHz", R(1071, 472, 92, 102));
-    layoutKnob("compAttack", R(875, 585, 92, 102));
-    layoutKnob("compRelease", R(973, 585, 92, 102));
-    layoutKnob("compMakeup", R(1071, 585, 92, 102));
-    layoutToggle("keyFilterOn", R(1172, 506, 82, 28));
-    layoutToggle("externalKey", R(1172, 544, 82, 28));
+    // DYNAMICS — again arranged as hardware first. The LCD graph is no longer
+    // embedded among the controls.
+    layoutKnob("compThreshold", R(338, 400, 116, 124));
+    layoutToggle("compOn", R(356, 548, 82, 30));
+    layoutKnob("compRatio",   R(466, 390, 78, 106));
+    layoutKnob("compKnee",    R(552, 390, 78, 106));
+    layoutKnob("keyFilterHz", R(638, 390, 78, 106));
+    layoutKnob("compAttack",  R(466, 520, 78, 106));
+    layoutKnob("compRelease", R(552, 520, 78, 106));
+    layoutKnob("compMakeup",  R(638, 520, 78, 106));
+    layoutToggle("keyFilterOn", R(714, 454, 72, 28));
+    layoutToggle("externalKey", R(714, 492, 72, 28));
+
+    // Shared desk-style LCD area on the right.
+    eqCurve.setBounds(R(832, 124, 412, 235));
+    dynamicsCurve.setBounds(R(832, 408, 412, 245));
 }
-
 void Live32ChannelAudioProcessorEditor::timerCallback()
 {
     const auto gr = processor.getGainReductionMeter();
@@ -402,7 +431,6 @@ double Live32ChannelAudioProcessorEditor::DynamicsCurve::outputForInput(double i
     const double threshold = raw("compThreshold");
     const double ratio = juce::jmax(1.0, static_cast<double>(raw("compRatio")));
     const double knee = static_cast<double>(raw("compKnee")) * 3.0;
-    const double makeup = raw("compMakeup");
     const double xDb = inputDb - threshold;
     double reductionDb = 0.0;
 
@@ -425,64 +453,135 @@ double Live32ChannelAudioProcessorEditor::DynamicsCurve::outputForInput(double i
         reductionDb = (1.0 / ratio - 1.0) * t * t / (2.0 * knee);
     }
 
-    return inputDb + reductionDb + makeup;
+    // The transfer display intentionally excludes makeup gain so the curve
+    // directly communicates threshold, ratio and knee.
+    return inputDb + reductionDb;
 }
 
 void Live32ChannelAudioProcessorEditor::DynamicsCurve::paint(juce::Graphics& g)
 {
-    auto r = getLocalBounds().toFloat().reduced(1.0f);
+    auto outer = getLocalBounds().toFloat().reduced(1.0f);
     g.setColour(juce::Colour(0xff080b0d));
-    g.fillRoundedRectangle(r, 4.0f);
+    g.fillRoundedRectangle(outer, 4.0f);
     g.setColour(juce::Colour(0xff3b4348));
-    g.drawRoundedRectangle(r, 4.0f, 1.0f);
+    g.drawRoundedRectangle(outer, 4.0f, 1.0f);
 
-    auto graph = r.reduced(12.0f, 18.0f);
-    constexpr double xMin = -60.0, xMax = 6.0;
-    constexpr double yMin = -60.0, yMax = 12.0;
-    const auto xForDb = [graph, xMin, xMax](double db)
+    const bool enabled = raw("compOn") >= 0.5f;
+    const double threshold = raw("compThreshold");
+    const double ratio = juce::jmax(1.0, static_cast<double>(raw("compRatio")));
+    const double kneeControl = static_cast<double>(raw("compKnee"));
+    const double kneeDb = kneeControl * 3.0;
+    const double makeup = raw("compMakeup");
+
+    // Leave space at the bottom for M32-style parameter readouts and at the
+    // right for a dedicated gain-reduction meter.
+    auto graph = outer.reduced(12.0f, 20.0f);
+    graph.removeFromBottom(42.0f);
+    auto grArea = graph.removeFromRight(30.0f);
+    graph.removeFromRight(8.0f);
+
+    constexpr double minDb = -60.0;
+    constexpr double maxDb = 0.0;
+
+    const auto xForDb = [graph, minDb, maxDb](double db)
     {
-        return graph.getX() + static_cast<float>((db - xMin) / (xMax - xMin)) * graph.getWidth();
+        return graph.getX() + static_cast<float>((db - minDb) / (maxDb - minDb)) * graph.getWidth();
     };
-    const auto yForDb = [graph, yMin, yMax](double db)
+    const auto yForDb = [graph, minDb, maxDb](double db)
     {
-        return graph.getBottom() - static_cast<float>((db - yMin) / (yMax - yMin)) * graph.getHeight();
+        return graph.getBottom() - static_cast<float>((db - minDb) / (maxDb - minDb)) * graph.getHeight();
     };
 
-    for (double db : { -48.0, -36.0, -24.0, -12.0, 0.0 })
+    // Console-like square grid.
+    for (double db : { -60.0, -48.0, -36.0, -24.0, -12.0, 0.0 })
     {
-        g.setColour(juce::Colour(0xff263038));
+        g.setColour(db == 0.0 ? juce::Colour(0xff566169) : juce::Colour(0xff283239));
         g.drawVerticalLine(static_cast<int>(xForDb(db)), graph.getY(), graph.getBottom());
         g.drawHorizontalLine(static_cast<int>(yForDb(db)), graph.getX(), graph.getRight());
     }
 
+    // Unity reference.
     juce::Path unity;
-    unity.startNewSubPath(xForDb(xMin), yForDb(xMin));
-    unity.lineTo(xForDb(xMax), yForDb(xMax));
-    g.setColour(juce::Colour(0xff586168));
+    unity.startNewSubPath(xForDb(minDb), yForDb(minDb));
+    unity.lineTo(xForDb(maxDb), yForDb(maxDb));
+    g.setColour(juce::Colour(0xff657078));
     g.strokePath(unity, juce::PathStrokeType(1.0f));
 
-    const bool enabled = raw("compOn") >= 0.5f;
-    juce::Path curve;
-    constexpr int points = 160;
-    for (int i = 0; i < points; ++i)
+    // Highlight the soft-knee region so the user can see what KNEE is doing.
+    if (enabled && kneeDb > 0.0)
     {
-        const double inDb = xMin + (xMax - xMin) * static_cast<double>(i) / static_cast<double>(points - 1);
-        const double outDb = enabled ? outputForInput(inDb) : inDb + raw("compMakeup");
-        const float x = xForDb(inDb);
-        const float y = yForDb(juce::jlimit(yMin, yMax, outDb));
-        if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
+        const auto left = xForDb(juce::jlimit(minDb, maxDb, threshold - kneeDb * 0.5));
+        const auto right = xForDb(juce::jlimit(minDb, maxDb, threshold + kneeDb * 0.5));
+        g.setColour(juce::Colour(0x18ffa800));
+        g.fillRect(juce::Rectangle<float>(left, graph.getY(), juce::jmax(1.0f, right - left), graph.getHeight()));
     }
 
-    const double threshold = raw("compThreshold");
-    g.setColour(juce::Colour(0x88ffa800));
-    g.drawVerticalLine(static_cast<int>(xForDb(threshold)), graph.getY(), graph.getBottom());
+    juce::Path curve;
+    constexpr int points = 200;
+    for (int i = 0; i < points; ++i)
+    {
+        const double inDb = minDb + (maxDb - minDb) * static_cast<double>(i) / static_cast<double>(points - 1);
+        const double outDb = enabled ? outputForInput(inDb) : inDb;
+        const float x = xForDb(inDb);
+        const float y = yForDb(juce::jlimit(minDb, maxDb, outDb));
+        if (i == 0) curve.startNewSubPath(x, y);
+        else curve.lineTo(x, y);
+    }
 
-    g.setColour(enabled ? juce::Colour(0xffffb21a) : juce::Colour(0xff70777c));
-    g.strokePath(curve, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    // Threshold line and threshold point, similar to the desk dynamics page.
+    const float threshX = xForDb(threshold);
+    const float threshY = yForDb(enabled ? outputForInput(threshold) : threshold);
+    g.setColour(juce::Colour(0x99ffa800));
+    g.drawVerticalLine(static_cast<int>(threshX), graph.getY(), graph.getBottom());
 
-    g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    g.setColour(enabled ? juce::Colour(0xffffc13b) : juce::Colour(0xff7a8288));
+    g.strokePath(curve, juce::PathStrokeType(2.3f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    if (enabled)
+    {
+        g.setColour(juce::Colour(0xffffa800));
+        g.fillEllipse(threshX - 4.0f, threshY - 4.0f, 8.0f, 8.0f);
+    }
+
+    // Gain-reduction meter on the right.
+    g.setColour(juce::Colour(0xff14191c));
+    g.fillRect(grArea);
+    const float grNorm = juce::jlimit(0.0f, 1.0f, gainReduction / 24.0f);
+    auto grFill = grArea.reduced(7.0f, 2.0f);
+    grFill = grFill.withHeight(grFill.getHeight() * grNorm);
+    grFill.setY(grArea.getY() + 2.0f);
+    g.setColour(juce::Colour(0xffd84b35));
+    g.fillRect(grFill);
+    g.setColour(juce::Colour(0xffaeb4b8));
+    g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
+    g.drawText("GR", grArea.toNearestInt().withHeight(14), juce::Justification::centred);
+
+    // Header status.
+    g.setFont(juce::FontOptions(9.5f, juce::Font::bold));
     g.setColour(enabled ? juce::Colour(0xffffb21a) : juce::Colour(0xff858b90));
-    g.drawText(enabled ? "COMP TRANSFER" : "COMP OFF", 10, 4, 130, 15, juce::Justification::centredLeft);
+    g.drawText(enabled ? "COMP" : "COMP OFF", 10, 4, 90, 14, juce::Justification::centredLeft);
     g.setColour(juce::Colour(0xffd9dddf));
-    g.drawText("GR " + juce::String(gainReduction, 1) + " dB", getWidth() - 90, 4, 80, 15, juce::Justification::centredRight);
+    g.drawText("GR " + juce::String(gainReduction, 1) + " dB",
+               getWidth() - 98, 4, 88, 14, juce::Justification::centredRight);
+
+    // M32-style numerical readouts under the graph.
+    auto info = outer.toNearestInt().reduced(12, 6);
+    info = info.removeFromBottom(34);
+    const int cellW = info.getWidth() / 4;
+
+    const auto drawCell = [&](int idx, const juce::String& title, const juce::String& value)
+    {
+        auto c = info.withX(info.getX() + idx * cellW).withWidth(cellW - 4);
+        auto top = c.removeFromTop(12);
+        g.setColour(juce::Colour(0xff9ea6ab));
+        g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
+        g.drawText(title, top, juce::Justification::centred);
+        g.setColour(juce::Colour(0xffe2e5e7));
+        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        g.drawText(value, c, juce::Justification::centred);
+    };
+
+    drawCell(0, "THRESH", juce::String(threshold, 1) + " dB");
+    drawCell(1, "RATIO",  juce::String(ratio, 1) + ":1");
+    drawCell(2, "KNEE",   juce::String(kneeControl, 0));
+    drawCell(3, "MAKEUP", juce::String(makeup, 1) + " dB");
 }

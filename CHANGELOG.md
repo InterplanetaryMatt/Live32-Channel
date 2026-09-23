@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+- Reworked the editor into a much more desk-like physical layout.
+- Moved EQ and dynamics graphs into a shared right-hand CHANNEL DISPLAY area.
+- Moved EQ MODE beside the physical EQ controls instead of floating under the graph.
+- Fixed slider readouts so APVTS attachment no longer exposes long raw floating-point values.
+- Rebuilt the dynamics display around threshold / ratio / knee geometry.
+- Added threshold marker, soft-knee region, GR meter, and THRESH / RATIO / KNEE / MAKEUP readouts.
+- Compressor transfer graph intentionally excludes makeup gain so its shape clearly represents compressor behaviour.
+- DSP/audio processing itself is unchanged.
+
 ## 0.2.2
 - Fixed a REAPER editor-instantiation crash introduced by the v0.2 desk-style GUI.
 - Dynamic EQ band buttons are now created before host resizing is enabled.
