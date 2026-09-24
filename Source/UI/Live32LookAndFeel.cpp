@@ -15,10 +15,10 @@ Live32LookAndFeel::Live32LookAndFeel()
 void Live32LookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                                           float sliderPos, float start, float end, juce::Slider&)
 {
-    const auto size = static_cast<float>(juce::jmin(width, height - 18));
+    const auto size = static_cast<float>(juce::jmin(width, height));
     const auto radius = size * 0.34f;
     const auto cx = static_cast<float>(x) + static_cast<float>(width) * 0.5f;
-    const auto cy = static_cast<float>(y) + size * 0.47f;
+    const auto cy = static_cast<float>(y) + static_cast<float>(height) * 0.5f;
     const float angle = start + sliderPos * (end - start);
 
     constexpr int segments = 17;

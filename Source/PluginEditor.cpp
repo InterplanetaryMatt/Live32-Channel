@@ -38,7 +38,7 @@ Live32ChannelAudioProcessorEditor::Live32ChannelAudioProcessorEditor(Live32Chann
     // immediately from setResizable()/setResizeLimits().
     addKnob("trim", "GAIN", " dB", 1);
     addKnob("hpfHz", "FREQUENCY", " Hz", 0);
-    addToggle("phase", "Ø");
+    addToggle("phase", "Φ");
     addToggle("hpfOn", "LOW CUT");
 
     addKnob("gateThreshold", "THRESHOLD", " dB", 1);
@@ -123,43 +123,56 @@ Live32ChannelAudioProcessorEditor::addKnob(const juce::String& id, const juce::S
     c->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     c->slider.setRotaryParameters(juce::MathConstants<float>::pi * 1.22f,
                                   juce::MathConstants<float>::pi * 2.78f, true);
-    c->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 82, 18);
-    c->slider.setNumDecimalPlacesToDisplay(decimals);
-    c->slider.textFromValueFunction = [suffix, decimals](double value)
-    {
-        return juce::String(value, decimals) + suffix;
-    };
-    c->slider.valueFromTextFunction = [](const juce::String& textValue)
-    {
-        return textValue.getDoubleValue();
-    };
+
+    // Do not use JUCE's Slider text box here. SliderAttachment can inherit the
+    // parameter's raw floating-point text for logarithmic NormalisableRanges,
+    // which is why values such as 4.9999995 appeared in the previous build.
+    // A dedicated readout label gives Live32 deterministic desk-style text.
+    c->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+
     c->label.setText(text, juce::dontSendNotification);
     c->label.setJustificationType(juce::Justification::centred);
     c->label.setColour(juce::Label::textColourId, juce::Colour(0xffd9dddf));
     c->label.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-    c->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.parameters, id, c->slider);
 
-    // SliderParameterAttachment may install parameter-driven text conversion.
-    // Re-apply Live32's compact desk-style formatting afterwards so values
-    // remain readable (e.g. "103 Hz", "5.0 ms", "4.3:1") rather than showing
-    // the parameter's full floating-point precision.
-    c->slider.setNumDecimalPlacesToDisplay(decimals);
-    c->slider.textFromValueFunction = [suffix, decimals](double value)
+    c->valueLabel.setJustificationType(juce::Justification::centred);
+    c->valueLabel.setColour(juce::Label::textColourId, juce::Colour(0xffe8e8e8));
+    c->valueLabel.setColour(juce::Label::backgroundColourId, juce::Colour(0xff17191b));
+    c->valueLabel.setColour(juce::Label::outlineColourId, juce::Colour(0xff596066));
+    c->valueLabel.setFont(juce::FontOptions(10.5f));
+    c->valueLabel.setEditable(false, false, false);
+
+    auto* slider = &c->slider;
+    auto* valueLabel = &c->valueLabel;
+    const auto updateReadout = [slider, valueLabel, suffix, decimals]
     {
-        return juce::String(value, decimals) + suffix;
+        const auto value = slider->getValue();
+        juce::String shown;
+
+        if (suffix == " Hz" && value >= 1000.0)
+        {
+            const int khzDecimals = value < 10000.0 ? 2 : 1;
+            shown = juce::String(value / 1000.0, khzDecimals) + " kHz";
+        }
+        else
+        {
+            shown = juce::String(value, decimals) + suffix;
+        }
+
+        valueLabel->setText(shown, juce::dontSendNotification);
     };
-    c->slider.valueFromTextFunction = [](const juce::String& textValue)
-    {
-        return textValue.getDoubleValue();
-    };
+
+    c->slider.onValueChange = updateReadout;
+    c->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.parameters, id, c->slider);
+    updateReadout();
 
     addAndMakeVisible(c->slider);
     addAndMakeVisible(c->label);
+    addAndMakeVisible(c->valueLabel);
     auto& ref = *c;
     knobs[id] = std::move(c);
     return ref;
 }
-
 Live32ChannelAudioProcessorEditor::ToggleControl&
 Live32ChannelAudioProcessorEditor::addToggle(const juce::String& id, const juce::String& text)
 {
@@ -241,7 +254,8 @@ void Live32ChannelAudioProcessorEditor::layoutKnob(const char* id, juce::Rectang
 {
     auto it = knobs.find(id); if (it == knobs.end()) return;
     auto& c = *it->second;
-    c.label.setBounds(r.removeFromTop(16));
+    c.label.setBounds(r.removeFromTop(15));
+    c.valueLabel.setBounds(r.removeFromBottom(18).reduced(2, 0));
     c.slider.setBounds(r);
 }
 
@@ -291,6 +305,7 @@ void Live32ChannelAudioProcessorEditor::updateEqBandVisibility()
             {
                 it->second->slider.setVisible(visible);
                 it->second->label.setVisible(visible);
+                it->second->valueLabel.setVisible(visible);
             }
         }
         if (auto it = choices.find(mode[i]); it != choices.end())
@@ -339,15 +354,20 @@ void Live32ChannelAudioProcessorEditor::resized()
     static constexpr const char* width[] = { "lowQ", "lowMidQ", "highMidQ", "highQ" };
     static constexpr const char* mode[]  = { "lowMode", "lowMidMode", "highMidMode", "highMode" };
 
-    layoutChoice(mode[selectedEqBand], R(334, 172, 92, 56));
-    layoutKnob(width[selectedEqBand],  R(454, 84, 112, 96));
-    layoutKnob(freq[selectedEqBand],   R(454, 166, 112, 96));
-    layoutKnob(gain[selectedEqBand],   R(454, 248, 112, 96));
-    layoutToggle("eqOn", R(590, 270, 74, 30));
+    // MODE and EQ on/off sit to the left of the encoder stack, matching the
+    // desk's physical hierarchy and keeping them clear of the value readouts.
+    layoutChoice(mode[selectedEqBand], R(338, 174, 96, 56));
+    layoutToggle("eqOn", R(350, 286, 74, 30));
+
+    // Give each selected-band encoder its own vertical lane so labels and
+    // readouts never collide.
+    layoutKnob(width[selectedEqBand],  R(472, 72, 108, 82));
+    layoutKnob(freq[selectedEqBand],   R(472, 160, 108, 82));
+    layoutKnob(gain[selectedEqBand],   R(472, 248, 108, 82));
 
     for (int i = 0; i < 4; ++i)
         if (auto* b = eqBandButtons[static_cast<std::size_t>(i)].get())
-            b->setBounds(R(690, 92 + i * 54, 86, 34));
+            b->setBounds(R(686, 82 + i * 51, 90, 34));
 
     // DYNAMICS — again arranged as hardware first. The LCD graph is no longer
     // embedded among the controls.
@@ -521,7 +541,10 @@ void Live32ChannelAudioProcessorEditor::DynamicsCurve::paint(juce::Graphics& g)
     for (int i = 0; i < points; ++i)
     {
         const double inDb = minDb + (maxDb - minDb) * static_cast<double>(i) / static_cast<double>(points - 1);
-        const double outDb = enabled ? outputForInput(inDb) : inDb;
+        // Always show the configured transfer characteristic. When COMP is
+        // bypassed the curve is dimmed, but the user can still see the ratio
+        // and knee they are about to engage.
+        const double outDb = outputForInput(inDb);
         const float x = xForDb(inDb);
         const float y = yForDb(juce::jlimit(minDb, maxDb, outDb));
         if (i == 0) curve.startNewSubPath(x, y);
@@ -530,16 +553,27 @@ void Live32ChannelAudioProcessorEditor::DynamicsCurve::paint(juce::Graphics& g)
 
     // Threshold line and threshold point, similar to the desk dynamics page.
     const float threshX = xForDb(threshold);
-    const float threshY = yForDb(enabled ? outputForInput(threshold) : threshold);
+    const float threshY = yForDb(outputForInput(threshold));
     g.setColour(juce::Colour(0x99ffa800));
     g.drawVerticalLine(static_cast<int>(threshX), graph.getY(), graph.getBottom());
 
-    g.setColour(enabled ? juce::Colour(0xffffc13b) : juce::Colour(0xff7a8288));
-    g.strokePath(curve, juce::PathStrokeType(2.3f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-    if (enabled)
+    g.setColour(enabled ? juce::Colour(0xffffc13b) : juce::Colour(0xff9a8251));
+    g.strokePath(curve, juce::PathStrokeType(2.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // M32-style threshold point: the bend in the transfer line should be
+    // immediately visible, even before the compressor is engaged.
+    g.setColour(enabled ? juce::Colour(0xffffa800) : juce::Colour(0xff9a8251));
+    g.fillRect(threshX - 4.0f, threshY - 4.0f, 8.0f, 8.0f);
+
+    // Mark the knee boundaries. With a non-zero knee the curve transitions
+    // smoothly between these two points rather than making a hard corner.
+    if (kneeDb > 0.0)
     {
-        g.setColour(juce::Colour(0xffffa800));
-        g.fillEllipse(threshX - 4.0f, threshY - 4.0f, 8.0f, 8.0f);
+        const auto kneeIn = juce::jlimit(minDb, maxDb, threshold - kneeDb * 0.5);
+        const auto kneeOut = juce::jlimit(minDb, maxDb, threshold + kneeDb * 0.5);
+        g.setColour(juce::Colour(0x88ffa800));
+        g.drawVerticalLine(static_cast<int>(xForDb(kneeIn)), graph.getY(), graph.getBottom());
+        g.drawVerticalLine(static_cast<int>(xForDb(kneeOut)), graph.getY(), graph.getBottom());
     }
 
     // Gain-reduction meter on the right.

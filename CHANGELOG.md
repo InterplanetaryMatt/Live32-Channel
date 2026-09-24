@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1
+- Replaced JUCE slider text boxes with dedicated Live32 value labels, eliminating long floating-point readouts on logarithmic controls.
+- Frequencies above 1 kHz now use compact kHz formatting.
+- Re-spaced the EQ encoder stack so WIDTH / FREQUENCY / GAIN labels and values cannot overlap.
+- Moved the EQ on/off button to the left-hand control area beneath MODE.
+- Changed the phase-invert legend to Φ.
+- Compressor display now always shows the configured transfer curve, even while COMP is bypassed, so ratio and knee remain visible.
+- Added a square threshold point and visible knee-boundary markers.
+- No DSP/audio changes.
+
 ## 0.3.0
 - Reworked the editor into a much more desk-like physical layout.
 - Moved EQ and dynamics graphs into a shared right-hand CHANNEL DISPLAY area.

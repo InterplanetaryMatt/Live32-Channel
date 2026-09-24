@@ -23,6 +23,7 @@ private:
     {
         juce::Slider slider;
         juce::Label label;
+        juce::Label valueLabel;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
 
