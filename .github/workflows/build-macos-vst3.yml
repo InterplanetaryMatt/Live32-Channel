@@ -1,0 +1,136 @@
+name: Build macOS VST3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+
+jobs:
+  apple-silicon:
+    name: Apple Silicon (arm64)
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Xcode
+          -DCMAKE_OSX_ARCHITECTURES=arm64
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Build VST3
+        run: cmake --build build --config Release --target Live32Channel_VST3
+
+      - name: Verify architecture
+        shell: bash
+        run: |
+          PLUGIN="build/Live32Channel_artefacts/Release/VST3/Live32 Channel.vst3"
+          test -d "$PLUGIN"
+          BIN=$(find "$PLUGIN/Contents/MacOS" -type f | head -n 1)
+          echo "Binary: $BIN"
+          file "$BIN"
+          ARCHS=$(lipo -archs "$BIN")
+          echo "Architectures: $ARCHS"
+          echo "$ARCHS" | grep -q "arm64"
+
+      - name: Package VST3
+        shell: bash
+        run: |
+          PLUGIN="build/Live32Channel_artefacts/Release/VST3/Live32 Channel.vst3"
+          ditto -c -k --keepParent "$PLUGIN" "Live32-Channel-macOS-Apple-Silicon-VST3.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Live32-Channel-macOS-Apple-Silicon
+          path: Live32-Channel-macOS-Apple-Silicon-VST3.zip
+          if-no-files-found: error
+
+  intel:
+    name: Intel (x86_64)
+    runs-on: macos-15-intel
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Xcode
+          -DCMAKE_OSX_ARCHITECTURES=x86_64
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+
+      - name: Build VST3
+        run: cmake --build build --config Release --target Live32Channel_VST3
+
+      - name: Verify architecture
+        shell: bash
+        run: |
+          PLUGIN="build/Live32Channel_artefacts/Release/VST3/Live32 Channel.vst3"
+          test -d "$PLUGIN"
+          BIN=$(find "$PLUGIN/Contents/MacOS" -type f | head -n 1)
+          echo "Binary: $BIN"
+          file "$BIN"
+          ARCHS=$(lipo -archs "$BIN")
+          echo "Architectures: $ARCHS"
+          echo "$ARCHS" | grep -q "x86_64"
+
+      - name: Package VST3
+        shell: bash
+        run: |
+          PLUGIN="build/Live32Channel_artefacts/Release/VST3/Live32 Channel.vst3"
+          ditto -c -k --keepParent "$PLUGIN" "Live32-Channel-macOS-Intel-VST3.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Live32-Channel-macOS-Intel
+          path: Live32-Channel-macOS-Intel-VST3.zip
+          if-no-files-found: error
+
+  universal:
+    name: Universal (arm64 + x86_64)
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Xcode
+          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Build VST3
+        run: cmake --build build --config Release --target Live32Channel_VST3
+
+      - name: Verify universal binary
+        shell: bash
+        run: |
+          PLUGIN="build/Live32Channel_artefacts/Release/VST3/Live32 Channel.vst3"
+          test -d "$PLUGIN"
+          BIN=$(find "$PLUGIN/Contents/MacOS" -type f | head -n 1)
+          echo "Binary: $BIN"
+          file "$BIN"
+          ARCHS=$(lipo -archs "$BIN")
+          echo "Architectures: $ARCHS"
+          echo "$ARCHS" | grep -q "arm64"
+          echo "$ARCHS" | grep -q "x86_64"
+
+      - name: Package VST3
+        shell: bash
+        run: |
+          PLUGIN="build/Live32Channel_artefacts/Release/VST3/Live32 Channel.vst3"
+          ditto -c -k --keepParent "$PLUGIN" "Live32-Channel-macOS-Universal-VST3.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Live32-Channel-macOS-Universal
+          path: Live32-Channel-macOS-Universal-VST3.zip
+          if-no-files-found: error

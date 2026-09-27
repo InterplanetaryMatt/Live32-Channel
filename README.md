@@ -1,4 +1,4 @@
-# Live32 Channel v0.3.1 — VST3 prototype
+# Live32 Channel v0.3.2 — VST3 prototype
 
 **Live32 Channel** is the first stand-alone plug-in spin-off from Live32: a digital live-console channel strip based on the same custom DSP used by the REAPER/JSFX project.
 
@@ -70,9 +70,51 @@ Copy the resulting `Live32 Channel.vst3` bundle to your normal VST3 folder, typi
 
 Then rescan plug-ins in REAPER.
 
+
+## Build on macOS
+
+The repository includes `.github/workflows/build-macos-vst3.yml`.
+
+GitHub Actions now produces three macOS builds:
+
+- **Apple Silicon** — native `arm64` build for M-series Macs
+- **Intel** — native `x86_64` build for Intel Macs
+- **Universal** — contains both `arm64` and `x86_64` in one VST3 bundle
+
+For most users, the **Universal** build is the easiest download.
+
+On GitHub open:
+
+`Actions -> Build macOS VST3 -> Run workflow`
+
+When the run finishes, download the appropriate artifact. Each artifact contains
+a ZIP made with macOS `ditto`, so the plug-in bundle's executable permissions
+are preserved.
+
+Install `Live32 Channel.vst3` in either:
+
+`~/Library/Audio/Plug-Ins/VST3/`
+
+or, for all users:
+
+`/Library/Audio/Plug-Ins/VST3/`
+
+Then restart/re-scan REAPER.
+
+These development builds are not yet Apple-notarised. If macOS quarantines a
+downloaded build during testing, remove quarantine from your own development
+copy with:
+
+```bash
+xattr -dr com.apple.quarantine "$HOME/Library/Audio/Plug-Ins/VST3/Live32 Channel.vst3"
+```
+
+The Apple Silicon and Universal builds require macOS 11 or later. The dedicated
+Intel build targets macOS 10.13 or later.
+
 ## Easiest build: GitHub Actions
 
-The repository includes `.github/workflows/build-windows-vst3.yml`.
+The repository includes `.github/workflows/build-windows-vst3.yml` for Windows and `.github/workflows/build-macos-vst3.yml` for macOS.
 
 If you put this project in a GitHub repository, open **Actions -> Build Windows VST3 -> Run workflow**. GitHub will compile the Windows VST3 and provide it as a downloadable build artifact.
 

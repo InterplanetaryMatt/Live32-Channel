@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2
+- Added GitHub Actions builds for macOS Apple Silicon (`arm64`).
+- Added GitHub Actions builds for Intel Macs (`x86_64`).
+- Added a Universal macOS VST3 containing both architectures.
+- Added automatic `lipo` architecture verification for all macOS builds.
+- macOS artifacts are packaged with `ditto` before upload so bundle permissions are preserved.
+- Added macOS installation/testing notes.
+- No DSP or GUI changes.
+
 ## 0.3.1
 - Replaced JUCE slider text boxes with dedicated Live32 value labels, eliminating long floating-point readouts on logarithmic controls.
 - Frequencies above 1 kHz now use compact kHz formatting.
